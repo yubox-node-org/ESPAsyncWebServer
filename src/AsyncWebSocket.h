@@ -84,6 +84,24 @@ typedef enum { WS_CONTINUATION, WS_TEXT, WS_BINARY, WS_DISCONNECT = 0x08, WS_PIN
 typedef enum { WS_MSG_SENDING, WS_MSG_SENT, WS_MSG_ERROR } AwsMessageStatus;
 typedef enum { WS_EVT_CONNECT, WS_EVT_DISCONNECT, WS_EVT_PONG, WS_EVT_ERROR, WS_EVT_DATA } AwsEventType;
 
+class AsyncWebSocketControl {
+ private:
+  uint8_t _opcode;
+  uint8_t *_data;
+  size_t _len;
+  bool _mask;
+  bool _finished;
+
+ public:
+  AsyncWebSocketControl(uint8_t opcode, const uint8_t *data=NULL, size_t len=0, bool mask=false);
+
+  virtual ~AsyncWebSocketControl();
+  virtual bool finished() const { return _finished; }
+  uint8_t opcode(){ return _opcode; }
+  uint8_t len(){ return _len + 2; }
+  size_t send(AsyncClient *client);
+};
+
 class AsyncWebSocketMessage
 {
 private:

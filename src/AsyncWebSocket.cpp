@@ -26,18 +26,7 @@
 #include <libb64/cencode.h>
 
 #ifndef ESP8266
-extern "C" {
-typedef struct {
-    uint32_t state[5];
-    uint32_t count[2];
-    unsigned char buffer[64];
-} SHA1_CTX;
-
-void SHA1Transform(uint32_t state[5], const unsigned char buffer[64]);
-void SHA1Init(SHA1_CTX* context);
-void SHA1Update(SHA1_CTX* context, const unsigned char* data, uint32_t len);
-void SHA1Final(unsigned char digest[20], SHA1_CTX* context);
-}
+#include "mbedtls/sha1.h"
 #else
 #include <Hash.h>
 #endif
@@ -138,53 +127,42 @@ size_t webSocketSendFrame(AsyncClient *client, bool final, uint8_t opcode, bool 
  * Control Frame
  */
 
-class AsyncWebSocketControl {
-private:
-    uint8_t _opcode;
-    uint8_t *_data;
-    size_t _len;
-    bool _mask;
-    bool _finished;
 
-public:
-    AsyncWebSocketControl(uint8_t opcode, const uint8_t *data=NULL, size_t len=0, bool mask=false)
-      :_opcode(opcode)
-      ,_len(len)
-      ,_mask(len && mask)
-      ,_finished(false)
+AsyncWebSocketControl::AsyncWebSocketControl(uint8_t opcode, const uint8_t *data, size_t len, bool mask)
+  :_opcode(opcode)
+  ,_len(len)
+  ,_mask(len && mask)
+  ,_finished(false)
+{
+    if (data == NULL)
+        _len = 0;
+    if (_len)
     {
-        if (data == NULL)
+        if (_len > 125)
+            _len = 125;
+
+        _data = (uint8_t*)malloc(_len);
+
+        if(_data == NULL)
             _len = 0;
-        if (_len)
-        {
-            if (_len > 125)
-                _len = 125;
-
-            _data = (uint8_t*)malloc(_len);
-
-            if(_data == NULL)
-                _len = 0;
-            else
-                memcpy(_data, data, len);
-        }
         else
-            _data = NULL;
+            memcpy(_data, data, len);
     }
+    else
+        _data = NULL;
+}
 
-    virtual ~AsyncWebSocketControl()
-    {
-        if (_data != NULL)
-            free(_data);
-    }
+AsyncWebSocketControl::~AsyncWebSocketControl()
+{
+    if (_data != NULL)
+        free(_data);
+}
 
-    virtual bool finished() const { return _finished; }
-    uint8_t opcode(){ return _opcode; }
-    uint8_t len(){ return _len + 2; }
-    size_t send(AsyncClient *client){
-        _finished = true;
-        return webSocketSendFrame(client, true, _opcode & 0x0F, _mask, _data, _len);
-    }
-};
+size_t AsyncWebSocketControl::send(AsyncClient *client)
+{
+    _finished = true;
+    return webSocketSendFrame(client, true, _opcode & 0x0F, _mask, _data, _len);
+}
 
 
 /*
@@ -1180,10 +1158,12 @@ AsyncWebSocketResponse::AsyncWebSocketResponse(const String& key, AsyncWebSocket
     sha1(key + WS_STR_UUID, hash);
 #else
     (String&)key += WS_STR_UUID;
-    SHA1_CTX ctx;
-    SHA1Init(&ctx);
-    SHA1Update(&ctx, (const unsigned char*)key.c_str(), key.length());
-    SHA1Final(hash, &ctx);
+    mbedtls_sha1_context ctx;
+    mbedtls_sha1_init(&ctx);
+    mbedtls_sha1_starts_ret(&ctx);
+    mbedtls_sha1_update_ret(&ctx, (const unsigned char*)key.c_str(), key.length());
+    mbedtls_sha1_finish_ret(&ctx, hash);
+    mbedtls_sha1_free(&ctx);
 #endif
     base64_encodestate _state;
     base64_init_encodestate(&_state);
