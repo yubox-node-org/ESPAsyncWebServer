@@ -20,6 +20,7 @@
 */
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
+#include <ctime>
 
 AsyncStaticWebHandler::AsyncStaticWebHandler(const char* uri, FS& fs, const char* path, const char* cache_control)
   : _fs(fs), _uri(uri), _path(path), _default_file(F("index.htm")), _cache_control(cache_control), _last_modified(), _callback(nullptr)
@@ -199,15 +200,17 @@ uint8_t AsyncStaticWebHandler::_countBits(const uint8_t value) const
 void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request)
 {
   // Get the filename from request->_tempObject and free it
-  String filename = String((char*)request->_tempObject);
+  String filename((char*)request->_tempObject);
   free(request->_tempObject);
   request->_tempObject = NULL;
   if((_username.length() && _password.length()) && !request->authenticate(_username.c_str(), _password.c_str()))
       return request->requestAuthentication();
 
   if (request->_tempFile == true) {
-    String etag = String(request->_tempFile.size());
-    if (_last_modified.length() && _last_modified == request->header(F("If-Modified-Since"))) {
+    time_t lw = request->_tempFile.getLastWrite();    // get last file mod time (if supported by FS)
+    if (lw) setLastModified(std::gmtime(&lw));
+    String etag(lw ? lw : request->_tempFile.size());   // set etag to lastmod timestamp if available, otherwise to size
+    if (_last_modified.length() && _last_modified == request->header("If-Modified-Since")) {
       request->_tempFile.close();
       request->send(304); // Not modified
     } else if (_cache_control.length() && request->hasHeader(F("If-None-Match")) && request->header(F("If-None-Match")).equals(etag)) {
