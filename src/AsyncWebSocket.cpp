@@ -25,11 +25,17 @@
 
 #include <libb64/cencode.h>
 
-#ifndef ESP8266
+#if defined(ESP32)
+#if ESP_IDF_VERSION_MAJOR < 5
 #include "mbedtls/sha1.h"
 #else
+#include <SHA1Builder.h>
+#endif
+#include <rom/ets_sys.h>
+#elif defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350) || defined(ESP8266)
 #include <Hash.h>
 #endif
+
 
 #define MAX_PRINTF_LEN 64
 
@@ -1152,29 +1158,26 @@ AsyncWebSocketResponse::AsyncWebSocketResponse(const String& key, AsyncWebSocket
     _code = 101;
     _sendContentLength = false;
 
-    uint8_t * hash = (uint8_t*)malloc(20);
-    if(hash == NULL)
-    {
-        _state = RESPONSE_FAILED;
-        return;
-    }
-    char * buffer = (char *) malloc(33);
-    if(buffer == NULL)
-    {
-        free(hash);
-        _state = RESPONSE_FAILED;
-        return;
-    }
-#ifdef ESP8266
+    uint8_t hash[20];
+    char buffer[33];
+#if defined(ESP8266) || defined(TARGET_RP2040) || defined(PICO_RP2040) || defined(PICO_RP2350) || defined(TARGET_RP2350)
     sha1(key + WS_STR_UUID, hash);
 #else
     (String&)key += WS_STR_UUID;
+#if ESP_IDF_VERSION_MAJOR < 5
     mbedtls_sha1_context ctx;
     mbedtls_sha1_init(&ctx);
     mbedtls_sha1_starts_ret(&ctx);
     mbedtls_sha1_update_ret(&ctx, (const unsigned char*)key.c_str(), key.length());
     mbedtls_sha1_finish_ret(&ctx, hash);
     mbedtls_sha1_free(&ctx);
+#else
+    SHA1Builder sha1;
+    sha1.begin();
+    sha1.add((const uint8_t *)key.c_str(), key.length());
+    sha1.calculate();
+    sha1.getBytes(hash);
+#endif
 #endif
     base64_encodestate _state;
     base64_init_encodestate(&_state);
@@ -1183,8 +1186,6 @@ AsyncWebSocketResponse::AsyncWebSocketResponse(const String& key, AsyncWebSocket
     addHeader(WS_STR_CONNECTION, WS_STR_UPGRADE);
     addHeader(WS_STR_UPGRADE, F("websocket"));
     addHeader(WS_STR_ACCEPT,buffer);
-    free(buffer);
-    free(hash);
 }
 
 void AsyncWebSocketResponse::_respond(AsyncWebServerRequest *request)
