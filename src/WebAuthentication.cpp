@@ -20,8 +20,8 @@
 */
 #include "WebAuthentication.h"
 #include <libb64/cencode.h>
-#ifdef ESP32
-#include "mbedtls/md5.h"
+#if defined(ESP32) || defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350)
+#include <MD5Builder.h>
 #else
 #include "md5.h"
 #endif
@@ -65,30 +65,31 @@ bool checkBasicAuthentication(const char * hash, const char * username, const ch
 }
 
 static bool getMD5(uint8_t * data, uint16_t len, char * output){//33 bytes or more
-#ifdef ESP32
-    mbedtls_md5_context _ctx;
+#if defined(ESP32) || defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350)
+  MD5Builder md5;
+  md5.begin();
+  md5.add(data, len);
+  md5.calculate();
+  md5.getChars(output);
 #else
-    md5_context_t _ctx;
-#endif
-  uint8_t i;
-  uint8_t * _buf = (uint8_t*)malloc(16);
-  if(_buf == NULL)
+  md5_context_t _ctx;
+
+  uint8_t *_buf = (uint8_t *)malloc(16);
+  if (_buf == NULL) {
     return false;
+  }
   memset(_buf, 0x00, 16);
-#ifdef ESP32
-  mbedtls_md5_init(&_ctx);
-  mbedtls_md5_starts_ret(&_ctx);
-  mbedtls_md5_update_ret(&_ctx, data, len);
-  mbedtls_md5_finish_ret(&_ctx, _buf);
-#else
+
   MD5Init(&_ctx);
   MD5Update(&_ctx, data, len);
   MD5Final(_buf, &_ctx);
-#endif
-  for(i = 0; i < 16; i++) {
+
+  for (uint8_t i = 0; i < 16; i++) {
     sprintf_P(output + (i * 2), PSTR("%02x"), _buf[i]);
   }
+
   free(_buf);
+#endif
   return true;
 }
 
