@@ -24,12 +24,6 @@
       "platforms": "espressif8266"
     },
     {
-      "owner": "me-no-dev",      
-      "name": "AsyncTCP",
-      "version": "^1.1.1",
-      "platforms": "espressif32"
-    },
-    {
       "name": "Hash",
       "platforms": "espressif8266"
     }
